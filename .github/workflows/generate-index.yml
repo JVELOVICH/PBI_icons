@@ -10,19 +10,33 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: generate-index-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-index:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with remote (rebase)
+        run: |
+          git pull --rebase origin main
 
       - name: Generate index.html
         shell: bash
         run: |
           set -euo pipefail
 
-          # Genera un index.html simple con links a todo lo que haya en /icons
           {
             echo '<!doctype html>'
             echo '<html lang="es">'
@@ -35,8 +49,7 @@ jobs:
             echo '  <h1>PBI Icons</h1>'
             echo '  <p>Íconos públicos para Power BI.</p>'
             echo '  <ul>'
-            
-            # Lista archivos (png/jpg/jpeg/svg/gif/webp). Ordenados.
+
             find icons -maxdepth 1 -type f \
               \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.svg" -o -iname "*.gif" -o -iname "*.webp" \) \
               -printf "%f\n" | sort | while read -r f; do
@@ -52,13 +65,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
+
+          if git diff --quiet -- index.html; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
           git commit -m "chore: auto-update index.html [skip ci]"
-          git push
+
+          git pull --rebase origin main
+          git push origin HEAD:main
